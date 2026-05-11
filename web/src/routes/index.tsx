@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   type AgentEvent,
   type ChatMessage,
@@ -351,8 +353,10 @@ function TurnBubble({ turn }: { turn: Turn }) {
       {turn.events.length > 0 && <Timeline events={turn.events} />}
       <div className="rounded-2xl rounded-bl-sm border border-(--color-line) bg-(--color-surface) px-4 py-3">
         {turn.content ? (
-          <div className="prose-chat whitespace-pre-wrap text-sm leading-relaxed text-(--color-ink)">
-            {turn.content}
+          <div className="prose-chat text-sm leading-relaxed text-(--color-ink)">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {turn.content}
+            </ReactMarkdown>
           </div>
         ) : turn.status === 'streaming' ? (
           <Thinking />
@@ -382,35 +386,73 @@ function TimelineRow({ event }: { event: TimelineEvent }) {
   const running = event.status === 'running'
   const isSub = event.kind === 'subagent'
   const label = isSub ? `subagent · ${event.name}` : `tool · ${event.name}`
-  const detail =
-    isSub
-      ? event.task
-      : summariseArgs(event.args)
+  const argsText = isSub
+    ? event.task
+    : (() => {
+        try {
+          return JSON.stringify(event.args, null, 2)
+        } catch {
+          return String(event.args)
+        }
+      })()
+  const summary = isSub ? event.task : summariseArgs(event.args)
+  const hasDetail = Boolean(argsText) || Boolean(event.result)
 
   return (
-    <div className="flex items-start gap-2.5 text-[12px]">
-      <span
-        className={[
-          'mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full',
-          running ? 'bg-(--color-accent) pulse-dot' : 'bg-(--color-ink-muted)',
-        ].join(' ')}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2">
-          <span className="font-mono text-(--color-accent-strong)">
-            {label}
-          </span>
-          {running && (
-            <span className="text-(--color-ink-muted)">running…</span>
+    <details className="group/row text-[12px]">
+      <summary className="flex cursor-pointer list-none items-start gap-2.5 marker:hidden">
+        <span
+          className={[
+            'mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full',
+            running ? 'bg-(--color-accent) pulse-dot' : 'bg-(--color-ink-muted)',
+          ].join(' ')}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2">
+            <span className="font-mono text-(--color-accent-strong)">
+              {label}
+            </span>
+            {running && (
+              <span className="text-(--color-ink-muted)">running…</span>
+            )}
+            {hasDetail && (
+              <span className="ml-auto text-[10px] text-(--color-ink-muted) transition group-open/row:opacity-0">
+                expand
+              </span>
+            )}
+          </div>
+          {summary && (
+            <div className="mt-0.5 truncate font-mono text-[11px] text-(--color-ink-soft) group-open/row:hidden">
+              {summary}
+            </div>
           )}
         </div>
-        {detail && (
-          <div className="mt-0.5 truncate font-mono text-[11px] text-(--color-ink-soft)">
-            {detail}
-          </div>
-        )}
-      </div>
-    </div>
+      </summary>
+      {hasDetail && (
+        <div className="mt-1.5 ml-4 flex flex-col gap-2">
+          {argsText && (
+            <div>
+              <div className="mb-1 text-[10px] uppercase tracking-wide text-(--color-ink-muted)">
+                {isSub ? 'task' : 'arguments'}
+              </div>
+              <pre className="overflow-x-auto rounded-md border border-(--color-line) bg-(--color-surface-2) px-2.5 py-1.5 font-mono text-[11px] text-(--color-ink-soft) whitespace-pre-wrap break-words">
+                {argsText}
+              </pre>
+            </div>
+          )}
+          {event.result && (
+            <div>
+              <div className="mb-1 text-[10px] uppercase tracking-wide text-(--color-ink-muted)">
+                result
+              </div>
+              <pre className="max-h-64 overflow-auto rounded-md border border-(--color-line) bg-(--color-surface-2) px-2.5 py-1.5 font-mono text-[11px] text-(--color-ink-soft) whitespace-pre-wrap break-words">
+                {event.result}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </details>
   )
 }
 
