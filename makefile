@@ -13,7 +13,7 @@ chat:
 	uv run python -m scripts.chat "$(PROMPT)"
 
 api:
-	uv run fastapi dev
+	uv run fastapi dev app/main.py
 
 web:
 	cd web && bun run dev

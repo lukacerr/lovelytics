@@ -21,6 +21,18 @@ from app.agent.prompts import DATA_ANALYST_PROMPT
 from app.config import settings
 from app.llm import subagent_chat_model
 
+# Hard ceiling on the string returned to the main agent. The inner pandas
+# REPL can produce arbitrarily large outputs (e.g. when the caller asks for
+# "all columns of N rows"); without a cap a single tool call can balloon
+# the run to millions of tokens. ~4k characters is enough for a small table
+# or a summary stat block, and forces the inner agent to actually reduce.
+_MAX_OUTPUT_CHARS = 8000
+_TRUNCATION_NOTE = (
+    "\n\n[output truncated by analyze_dataframe — the inner agent returned "
+    "more than {limit} characters; re-ask with an aggregation or .head(N) "
+    "to get a smaller result]"
+)
+
 
 @lru_cache(maxsize=1)
 def _pandas_agent():
@@ -47,6 +59,15 @@ async def analyze_dataframe(question: str) -> str:
     ML predictors don't cover. The agent has access to two DataFrames:
     `df1` (fraud transactions, target `fraud`) and `df2` (customer purchases,
     target `purchase_amount`). Ask one focused question at a time.
+
+    The tool's output is hard-capped at ~4000 characters. Do NOT ask for
+    "all columns" or "full details of N rows" — request an aggregation,
+    a `.head(N)` with the specific columns you need, or summary statistics.
     """
     result = await _pandas_agent().ainvoke({"input": question})
-    return str(result["output"])  # pyright: ignore[reportAny]
+    output = str(result["output"])  # pyright: ignore[reportAny]
+    if len(output) > _MAX_OUTPUT_CHARS:
+        return output[:_MAX_OUTPUT_CHARS] + _TRUNCATION_NOTE.format(
+            limit=_MAX_OUTPUT_CHARS
+        )
+    return output

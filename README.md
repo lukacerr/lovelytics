@@ -15,7 +15,8 @@ This README is the **technical write-up** for the agent. Setup and operational p
 ## 1. TL;DR
 
 - **Main agent**: [DeepAgents](https://docs.langchain.com/oss/python/deepagents) (slimmed down) running `zai-org/glm-5` on Novita's OpenAI-compatible API.
-- **Two specialised subagents** spawned via the `task` tool: a `data_analyst` (pandas dataframe agent) and a `kb_researcher` (ReAct over Pinecone). Both run on the cheaper `deepseek/deepseek-v4-flash`.
+- **One specialised subagent** spawned via the `task` tool: a `kb_researcher` (ReAct over Pinecone). It runs on the cheaper `deepseek/deepseek-v4-flash`.
+- **One delegated tool**, `analyze_dataframe`, that wraps `create_pandas_dataframe_agent` (also `deepseek/deepseek-v4-flash`) and answers ad-hoc CSV questions in a single call — kept as a flat tool rather than a subagent because there's no need for the planner to round-trip on dataframe work.
 - **Two ML tools** wrapped around scikit-learn `HistGradientBoostingClassifier` (fraud) and `HistGradientBoostingRegressor` (purchase amount), with pydantic-validated inputs.
 - **Knowledge base**: 20 markdown docs split with `MarkdownHeaderTextSplitter` + `RecursiveCharacterTextSplitter`, embedded with Novita `baai/bge-m3` (1024-d), upserted to Pinecone serverless.
 - **Serving**: FastAPI with a single SSE `/chat` endpoint that streams typed events (`token | tool_start | tool_end | subagent_start | subagent_end | citation | final | error`) so the UI can render the agent's reasoning live.
@@ -32,7 +33,7 @@ flowchart LR
   API --> AG{{"Main Agent<br/>DeepAgents · GLM-5"}}
   AG -->|tool| FM["predict_fraud<br/>sklearn HGB Classifier"]
   AG -->|tool| PM["predict_purchase<br/>sklearn HGB Regressor"]
-  AG -->|task → subagent| DA["data_analyst<br/>pandas DF agent · v4-flash"]
+  AG -->|tool| DA["analyze_dataframe<br/>pandas DF agent · v4-flash"]
   AG -->|task → subagent| KR["kb_researcher<br/>ReAct · v4-flash"]
   DA --> CSV[("fraud_dataset.csv<br/>product_purchase_dataset.csv")]
   KR -->|kb_search| PC[("Pinecone<br/>lovelytics-kb")]
@@ -56,14 +57,14 @@ sequenceDiagram
   participant U as User (Web UI)
   participant API as FastAPI /chat
   participant M as Main Agent (GLM-5)
-  participant DA as data_analyst (v4-flash)
+  participant DA as analyze_dataframe (v4-flash)
   participant KR as kb_researcher (v4-flash)
   participant ML as predict_fraud tool
 
   U->>API: prompt
   API->>M: stream
   M->>M: write_todos (plan)
-  M->>DA: task("pull CUST7823's transactions + aggregates")
+  M->>DA: analyze_dataframe("pull CUST7823's transactions + aggregates")
   DA-->>M: rows + summary stats
   M->>ML: predict_fraud(features for top suspicious tx)
   ML-->>M: prob + top contributing features
@@ -96,17 +97,19 @@ Re-running ingestion **rebuilds** the namespace (delete + re-upsert) so the inde
 
 ### 5.1 Main agent — DeepAgents, slimmed down
 
-We use `create_deep_agent` with the planner and subagent middleware kept, and the filesystem tools dropped via `builtin_tools=["write_todos"]`. The virtual filesystem isn't useful here — none of our tools read or write files at the agent layer.
+We use `create_deep_agent` with the planner and subagent middleware kept, and the filesystem tools dropped by registering a `HarnessProfile` that lists the FS tool names (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`) in `excluded_tools`. The DeepAgents `FilesystemMiddleware` itself is required scaffolding for the planner — only its *exposed tools* are stripped. The virtual filesystem isn't useful here: none of our tools read or write files at the agent layer.
 
-The system prompt is short and scoped: *you are a fraud-analyst assistant; delegate KB lookups to `kb_researcher`, dataframe questions to `data_analyst`, and use the ML tools for predictions; always cite KB sources by filename and section*.
+The system prompt is short and scoped: *you are a fraud-analyst assistant; delegate KB lookups to `kb_researcher`, call `analyze_dataframe` for ad-hoc CSV questions, and use the ML tools for predictions; always cite KB sources by filename and section*.
 
-LLM parameters are tuned conservatively: `temperature=0.1`, `top_p=0.9`. We want deterministic-ish, factual answers, not creative writing.
+LLM parameters are tuned conservatively: `temperature=0.0`, `top_p=0.9`. We want deterministic, factual answers, not creative writing.
 
-### 5.2 `data_analyst` subagent
+### 5.2 `analyze_dataframe` tool
 
-Wraps `langchain_experimental.agents.create_pandas_dataframe_agent` with `agent_type="tool-calling"` over both dataframes loaded once at startup. Required `allow_dangerous_code=True` because the agent runs a Python REPL on the dataframes — acceptable in a single-tenant prototype on two static CSVs, called out again in §9.
+A plain `@tool` (`async def analyze_dataframe(question: str) -> str`) that wraps `langchain_experimental.agents.create_pandas_dataframe_agent` with `agent_type="tool-calling"` over both dataframes loaded once at startup. Required `allow_dangerous_code=True` because the inner agent runs a Python REPL on the dataframes — acceptable in a single-tenant prototype on two static CSVs, called out again in §9.
 
-Same low temperature as the main agent (`0.1`).
+Kept as a tool rather than a subagent: dataframe questions are typically one-shot (run a pandas op, summarise) and don't benefit from the planner round-tripping with a separate agent context. The `DATA_ANALYST_PROMPT` enforces a "reduce before returning" rule (`.value_counts()`, `.head(N≤10)`, `.describe()`, etc.) so the tool never dumps raw rows back into the main agent's context.
+
+Same `temperature=0.0` as the main agent.
 
 ### 5.3 `kb_researcher` subagent
 
@@ -132,7 +135,7 @@ All four schemas live in `app/ml/schemas.py` and are picked up automatically by 
 | `GET` | `/health` | `{status, models_loaded, kb_indexed}` |
 | `GET` | `/docs` | Auto-generated OpenAPI UI |
 | `POST` | `/chat` | Streams the agent run as SSE |
-| `POST` | `/kb/ingest` | Rebuilds the Pinecone namespace from `financial_documents/`. Requires `X-API-Key` header matching `settings.INGEST_API_KEY` whenever `ENV != "development"` |
+| `POST` | `/kb/ingest` | Rebuilds the Pinecone namespace from `financial_documents/`. Requires `X-API-Key` header matching `settings.API_KEY` whenever `ENV != "development"` |
 
 `/chat` request:
 
@@ -155,7 +158,9 @@ All four schemas live in `app/ml/schemas.py` and are picked up automatically by 
 
 Pydantic models for requests/responses live inline in their route module — no `schemas.py` for so little surface area.
 
-The FastAPI app entry point lives at the **repo root** (`main.py`) so `fastapi dev` and `fastapi run` work without extra flags.
+The FastAPI app object lives at `app/main.py`, keeping all application code inside the `app/` package. `make api` runs `fastapi dev app/main.py`; the Dockerfile passes the same path to `fastapi run`.
+
+CORS is wired in `app/main.py`. In `ENV=development` all origins are allowed; in production the allow-list comes from `CORS_ALLOW_ORIGINS` (comma-separated env var).
 
 ### 5.6 Configuration
 
@@ -165,6 +170,8 @@ Environment-only variables (the full list — see `.env.example`):
 
 ```
 ENV=development                 # defaults to "production"; toggles X-API-Key enforcement on /kb/ingest
+API_KEY=...                     # required when ENV != "development"; gates /kb/ingest
+CORS_ALLOW_ORIGINS=https://app.example.com,https://example.com   # comma-separated; ignored in dev (all origins allowed)
 NOVITA_API_KEY=...
 PINECONE_API_KEY=...
 LANGSMITH_TRACING=true
@@ -246,6 +253,7 @@ Everything is wrapped in the `Makefile`. Common entry points:
 make install         # uv sync + bun install (web)
 make train           # train both ML models, write models/*.joblib + metrics.json
 make ingest          # rebuild the Pinecone KB namespace
+make chat            # CLI smoke test: uv run python -m scripts.chat [--stream] "..."
 make api             # uv run fastapi dev (http://localhost:8000)
 make web             # bun run dev   (http://localhost:3000)
 make web-build       # static SPA build → web/dist (Cloudflare Pages ready)
@@ -308,22 +316,31 @@ Items marked *(planned)* are expected by the architecture but not yet implemente
 ```
 app/
   __init__.py
-  config.py              # pydantic-settings singleton
-  sse.py                 # astream_events → typed SSE          (planned)
-  agent/                                                       (planned)
-    builder.py           # build_main_agent() with slimmed harness
-    prompts.py
+  config.py              # pydantic-settings singleton + .env loader
+  llm.py                 # main_chat_model() / subagent_chat_model() factories
+  main.py                # FastAPI app + CORS + router includes
+  sse.py                 # astream_events → typed SSE frame mapper
+  api/
+    __init__.py
+    deps.py              # require_api_key dependency
+    health.py            # GET /health
+    chat.py              # POST /chat (SSE)
+    kb.py                # POST /kb/ingest (API-key gated outside dev)
+  agent/
+    __init__.py
+    builder.py           # build_agent() — registers FS-exclusion HarnessProfile
+    prompts.py           # MAIN_PROMPT, KB_RESEARCHER_PROMPT, DATA_ANALYST_PROMPT
+    subagents.py         # kb_researcher_subagent() — SubAgent TypedDict factory
     tools/
-      ml.py              # predict_fraud, predict_purchase wrappers
-      kb.py              # kb_search (used ONLY inside kb_researcher)
-    subagents/
-      data_analyst.py
-      kb_researcher.py
+      __init__.py
+      ml.py              # predict_fraud, predict_purchase (async @tool)
+      kb.py              # kb_search (used ONLY inside kb_researcher subagent)
+      dataframe.py       # analyze_dataframe — pandas DF agent wrapper
   retrieval/
     __init__.py
     splitter.py          # Markdown → header-aware chunks
     embeddings.py        # Novita bge-m3 via OpenAIEmbeddings (chunk_size=64)
-    vectorstore.py       # async ensure_index + langchain wrapper
+    vectorstore.py       # async ensure_index + per-call PineconeVectorStore
     ingest.py            # rebuild_kb() — wipe + re-upsert
     retrieve.py          # search() — basis for kb_search tool
   ml/
@@ -337,23 +354,18 @@ scripts/
   __init__.py
   ingest_kb.py
   train_all.py
+  chat.py                # CLI smoke test: --stream / --verbose
 tests/                   # flat, pytest
   test_splitter.py
   test_ml.py
+  test_agent.py
 models/                  # fraud.joblib, purchase.joblib, metrics.json (committed)
 datasets/                # fraud + purchase CSVs
 financial_documents/     # 20 markdown docs
 web/                     # React/TanStack SPA                  (scaffolded)
 assets/                  # logos
-main.py                  # FastAPI entry point at repo root    (placeholder)
 Makefile
 Dockerfile
 pyproject.toml
 .pre-commit-config.yaml
 ```
-
----
-
-## 12. Methodology note
-
-This prototype was built with heavy use of AI coding assistants (OpenCode + Claude). The plan in this README was written first, reviewed, and only then turned into code — the planning artifact is preserved in `~/.plannotator/plans/` and the same discipline was applied at every meaningful decision point (model choice, retrieval shape, subagent boundaries, SSE event taxonomy).

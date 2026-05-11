@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     PINECONE_API_KEY: SecretStr
     ENV: Literal["development", "production"] = "production"
 
+    # API auth — required in production (enforced at request time by the
+    # `require_api_key` dependency). Optional here so dev runs don't need it.
+    API_KEY: SecretStr | None = None
+
+    # CORS — ignored in development (we open everything). In production this
+    # is the explicit allow-list; defaults cover the local dev SPA and the
+    # deployed Cloudflare Pages origin. `pydantic-settings` accepts either a
+    # JSON array or a comma-separated string in the env var.
+    CORS_ALLOW_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "https://lovelytics.luka.software",
+    ]
+
     NOVITA_BASE_URL: str = "https://api.novita.ai/openai/v1"
 
     MAIN_MODEL: str = "zai-org/glm-5"

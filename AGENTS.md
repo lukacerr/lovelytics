@@ -19,7 +19,7 @@ A prototype financial fraud-analyst assistant. One FastAPI service exposes an SS
 - **No secrets in code.** Everything goes through `app/config.py` (`pydantic-settings`).
 - **Don't break the slim DeepAgents harness.** The main agent intentionally ships without the filesystem tools (`builtin_tools=["write_todos"]`). Don't re-enable them unless you have a concrete need.
 - **Don't expose `kb_search` to the main agent.** It belongs to `kb_researcher` only — that boundary is deliberate (see README §5.3).
-- **Tune LLM params.** Default `temperature=0.1`, `top_p=0.9`. If you change them, justify it in code comments.
+- **Tune LLM params.** Default `temperature=0.0`, `top_p=0.9`. If you change them, justify it in code comments.
 - **Don't annotate types when they're inferrable.** Reserve annotations for function parameters, pydantic/`Settings` model fields, and return types that aren't obvious from the body. `def main():` over `def main() -> None:`.
 - **Prefer async.** When a library exposes both sync and async APIs (Pinecone, langchain vector stores, FastAPI handlers), use the async one.
 
@@ -28,7 +28,7 @@ A prototype financial fraud-analyst assistant. One FastAPI service exposes an SS
 ## 3. Stack at a glance
 
 - Python 3.14, `uv` for env management.
-- FastAPI + SSE for serving (entry point: `main.py` at repo root).
+- FastAPI + SSE for serving (entry point: `app/main.py`).
 - LangChain + DeepAgents + `langchain-openai` (pointed at `https://api.novita.ai/openai`) + `langchain-pinecone` + `langchain-experimental` (pandas dataframe agent).
 - scikit-learn `HistGradientBoosting{Classifier,Regressor}` for the ML tools.
 - pydantic v2 for all input validation; `pydantic-settings` for config.
@@ -53,7 +53,7 @@ All model IDs are env vars (`MAIN_MODEL`, `SUBAGENT_MODEL`, `EMBEDDING_MODEL`). 
 See README §11. Key conventions:
 
 - `app/` is a package; everything importable lives there.
-- The FastAPI app object lives at the repo root (`main.py`) — `fastapi dev` and `fastapi run` work without args.
+- The FastAPI app object lives at `app/main.py` so all application code stays inside the `app/` package. `make api` (`fastapi dev app/main.py`) and the Dockerfile (`fastapi run app/main.py`) both pass the path explicitly.
 - `scripts/` contains thin CLI wrappers around `app/` functions. Prefer adding logic to `app/` and calling it from a script, not the other way around.
 - `tests/` is **flat**, not split into `unit/` and `integration/`. Coverage is intentionally narrow — enough for safe refactoring, not exhaustive.
 
@@ -67,6 +67,7 @@ Common targets (see `Makefile`):
 make install     # uv sync + bun install
 make train       # train both models, write models/*.joblib + metrics.json
 make ingest      # rebuild Pinecone KB namespace
+make chat        # CLI smoke test: uv run python -m scripts.chat
 make api         # uv run fastapi dev
 make web         # bun run dev (web/)
 make web-build   # static SPA build (web/dist)
@@ -91,11 +92,11 @@ This is the most common place to make a wrong call. Use the table:
 | Delegate | Main agent | `task` | Spawns subagents |
 | Predict fraud | Main agent | `predict_fraud` | pydantic-validated input |
 | Predict purchase amount | Main agent | `predict_purchase` | pydantic-validated input |
-| Query CSVs | `data_analyst` subagent | (pandas REPL) | `allow_dangerous_code=True` — prototype only |
+| Query CSVs | Main agent | `analyze_dataframe` | Plain `@tool` wrapping `create_pandas_dataframe_agent`. `allow_dangerous_code=True` — prototype only. Prompt enforces "reduce before returning" to keep tool output small. |
 | Search KB | `kb_researcher` subagent | `kb_search` | **Not** exposed to main agent |
 | Cite sources | `kb_researcher` subagent | (returned in result) | Mapped to `citation` SSE events |
 
-If you find yourself wanting to give the main agent a fourth tool, ask whether it should be a subagent instead.
+If you find yourself wanting to give the main agent a fifth tool, ask whether it should be a subagent instead.
 
 ---
 
