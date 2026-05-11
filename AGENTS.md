@@ -134,8 +134,11 @@ token | tool_start | tool_end | subagent_start | subagent_end | citation | final
 ## 11. Web
 
 - TanStack Router but **SPA mode only**. No `@tanstack/react-start` server routes. The `web/dist` build must be deployable to Cloudflare Pages with no Node runtime.
-- API base URL via `VITE_API_BASE_URL`.
-- One chat route. Don't add navigation cruft — this is a demo.
+- API base URL via `VITE_API_BASE_URL` (see `web/.env.example`).
+- One chat route (`web/src/routes/index.tsx`). Don't add navigation cruft — this is a demo.
+- SSE consumed via `fetch` + manual parser in `web/src/lib/api.ts` (`streamChat()` async generator). `EventSource` is GET-only and won't work for the `POST /chat` payload.
+- Styling lives in `web/src/styles.css`: dark palette, `#c47fd5` accent, `.prose-chat` typography, `rise-in` / `pulse-dot` keyframes. Keep design tokens here — no per-component CSS files.
+- Imports use the `#/...` alias (TanStack default), e.g. `#/lib/api`.
 
 ---
 
