@@ -96,6 +96,17 @@ body {
   animation: pulse-dot 1.1s ease-in-out infinite;
 }
 
+/* Indeterminate spinner used in the composer running indicator. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spinner {
+  color: var(--color-accent);
+  animation: spin 900ms linear infinite;
+}
+
 /* Markdown-ish basic typography inside assistant bubbles. We render
  * streamed plain text, so this is just for readability of headings/lists
  * when the model emits markdown literals. */
@@ -139,6 +150,16 @@ body {
   border-collapse: collapse;
   font-size: 0.85em;
   margin: 0.5em 0;
+  width: max-content;
+  max-width: 100%;
+}
+.prose-chat .table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.5em 0;
+}
+.prose-chat .table-wrap > table {
+  margin: 0;
 }
 .prose-chat th,
 .prose-chat td {
