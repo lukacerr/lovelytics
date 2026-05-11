@@ -1,0 +1,99 @@
+{
+  "fraud": {
+    "cv": {
+      "accuracy": {
+        "mean": 0.99,
+        "std": 0.020000000000000018
+      },
+      "average_precision": {
+        "mean": 0.99,
+        "std": 0.020000000000000018
+      },
+      "f1": {
+        "mean": 0.9894736842105264,
+        "std": 0.02105263157894739
+      },
+      "roc_auc": {
+        "mean": 0.99,
+        "std": 0.020000000000000018
+      }
+    },
+    "permutation_importance": {
+      "account_age_days": 0.0,
+      "account_balance": 0.0,
+      "avg_transaction_amount_30d": 0.0,
+      "billing_address_match": 0.0,
+      "card_present": 0.0,
+      "country": 0.0,
+      "credit_limit": 0.0,
+      "customer_age": 0.0,
+      "customer_risk_score": 0.0,
+      "cvv_match": 0.0,
+      "day_of_week": 0.0,
+      "debt_to_income_ratio": 0.0,
+      "device_type": 0.0,
+      "distance_from_home_km": 0.0,
+      "distance_from_last_transaction_km": 0.0,
+      "failed_transactions_24h": 0.0,
+      "hour_of_day": 0.0,
+      "ip_reputation_score": 0.0,
+      "is_international": 0.0,
+      "is_recurring": 0.0,
+      "merchant_category": 0.0,
+      "merchant_risk_score": 0.0,
+      "num_transactions_24h": 0.0,
+      "num_transactions_7d": 0.0,
+      "previous_fraud_reports": 0.0,
+      "shipping_address_match": 0.0,
+      "transaction_amount": 0.5,
+      "transaction_type": 0.0,
+      "transaction_velocity_24h": 0.0
+    }
+  },
+  "purchase": {
+    "cv": {
+      "mae": {
+        "mean": 17.378826665136486,
+        "std": 1.2640639060496424
+      },
+      "r2": {
+        "mean": 0.9640958429657573,
+        "std": 0.024672818556593378
+      },
+      "rmse": {
+        "mean": 24.970814422269363,
+        "std": 4.0318945661574634
+      }
+    },
+    "permutation_importance": {
+      "age": 0.03105950834806833,
+      "avg_transaction_value": 0.07943194760669128,
+      "cart_abandonment_rate": 0.011306781521332266,
+      "customer_satisfaction_score": 0.0,
+      "customer_tenure_days": 0.0016698248915111402,
+      "distance_to_nearest_store_km": 0.005064658413382028,
+      "education_level": 0.0002171867036724451,
+      "email_engagement_rate": 0.0019648196029229403,
+      "gender": 6.736004070112545e-05,
+      "has_children": 2.112178497470918e-06,
+      "has_credit_card": 0.0,
+      "income_bracket": 0.0011672370607280103,
+      "last_purchase_days_ago": 1.7489222337718767e-05,
+      "location_type": 0.0,
+      "loyalty_points": 0.03219503066150303,
+      "marital_status": 0.0020229622839436747,
+      "membership_tier": 0.00963187140583136,
+      "mobile_app_user": 0.0,
+      "num_customer_service_contacts": 0.0009221607268591336,
+      "num_transactions_last_month": 0.22779200388426785,
+      "num_transactions_last_year": 0.0534367093160235,
+      "occupation_category": 0.000734077873155714,
+      "owns_home": 1.0942113035583567e-05,
+      "preferred_category": 0.0018640441781076155,
+      "preferred_payment_method": 0.0,
+      "product_return_rate": 0.004454581901453769,
+      "social_media_follower": 0.0,
+      "total_spent_last_year": 0.005509332269191247
+    }
+  }
+}

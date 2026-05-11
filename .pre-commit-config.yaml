@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: 1.39.3
+    hooks:
+      - id: basedpyright
+  - repo: local
+    hooks:
+      # Re-train models whenever training code or input CSVs change.
+      # Stages the regenerated artifacts so they ride along in the same commit.
+      - id: train-models
+        name: train ML models
+        entry: bash -c 'make train && git add models/fraud.joblib models/purchase.joblib models/metrics.json'
+        language: system
+        pass_filenames: false
+        files: '^(datasets/.*\.csv|app/ml/.*\.py|scripts/train_all\.py)$'

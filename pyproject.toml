@@ -1,0 +1,53 @@
+[project]
+name = "lovelytics"
+version = "1.0.0"
+author = "Luka Cerrutti <lukacerrutti2002@gmail.com>"
+description = "Lovelytics GenAI test"
+readme = "README.md"
+requires-python = ">=3.14"
+
+dependencies = [
+    "deepagents>=0.5.8",
+    "fastapi[standard]>=0.136.1",
+    "joblib>=1.5.3",
+    "langchain-experimental>=0.4.1",
+    "langchain-openai>=1.2.1",
+    "langchain-pinecone>=0.2.13",
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "python-dotenv>=1.2.2",
+    "python-toon>=0.1.3",
+    "scikit-learn>=1.8.0",
+    "tabulate>=0.10.0",
+]
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.3",
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.12",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.basedpyright]
+reportMissingTypeStubs = false
+# The rules below fire almost exclusively on third-party APIs whose type
+# information is incomplete (langchain Document.metadata, pinecone client
+# return types, pydantic-settings model_config, etc.). They are noise we can't
+# fix from our side, so they're disabled globally rather than silenced
+# per-call.
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportMissingParameterType = false
+reportUnannotatedClassAttribute = false
+reportUnusedCallResult = false
+reportExplicitAny = false
